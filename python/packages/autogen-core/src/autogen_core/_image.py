@@ -85,7 +85,7 @@ class Image:
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
         # Custom validation
-        def validate(value: Any, validation_info: ValidationInfo) -> Image:
+        def validate(value: Any, validation_info: ValidationInfo) -> Any:  # Return Any instead of Image
             if isinstance(value, dict):
                 base_64 = cast(str | None, value.get("data"))  # type: ignore
                 if base_64 is None:
@@ -93,12 +93,26 @@ class Image:
                 return cls.from_base64(base_64)
             elif isinstance(value, cls):
                 return value
+            elif hasattr(value, "__class__") and value.__class__.__name__ == "File":
+                # Allow File objects to pass through validation
+                return value
             else:
+                # If we're validating an item in a list for UserMessage.content,
+                # we need to allow File objects to pass through
+                module_name = getattr(value.__class__, "__module__", "")
+                if module_name == "autogen_core._file" and getattr(value.__class__, "__name__", "") == "File":
+                    return value
                 raise TypeError(f"Expected dict or {cls.__name__} instance, got {type(value)}")
 
         # Custom serialization
-        def serialize(value: Image) -> dict[str, Any]:
-            return {"data": value.to_base64()}
+        def serialize(value: Any) -> dict[str, Any]:
+            # Handle both Image and File objects
+            if isinstance(value, cls):
+                return {"data": value.to_base64()}
+            # For File objects, delegate to their own serialization
+            elif hasattr(value, "to_base64"):
+                return {"data": value.to_base64(), "filename": getattr(value, "filename", "unknown")}
+            return {"data": ""}
 
         return core_schema.with_info_after_validator_function(
             validate,

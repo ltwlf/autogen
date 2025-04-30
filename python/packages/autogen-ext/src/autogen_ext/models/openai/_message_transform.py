@@ -231,6 +231,9 @@ def _set_multimodal_content(
             # TODO: support url based images
             # TODO: support specifying details
             parts.append(cast(ChatCompletionContentPartImageParam, part.to_openai_format()))
+        elif hasattr(part, "to_openai_format") and callable(getattr(part, "to_openai_format")):
+            # Handle any object with to_openai_format method (like File)
+            parts.append(cast(ChatCompletionContentPartParam, part.to_openai_format()))
         else:
             raise ValueError(f"Unknown content part: {part}")
 
